@@ -33,7 +33,7 @@ const RFIDS = [
 ];
 
 const rnd = (n: number) => Math.floor(Math.random() * n);
-const pick = <T,>(arr: T[]) => arr[rnd(arr.length)];
+const pick = <T,>(arr: T[]) => arr[rnd(arr.length)] as T;
 const HOUR = 3600_000;
 
 let counter = 0;
@@ -86,7 +86,7 @@ export function createInitialState(): SafeparkState {
 
   // Two vehicles currently parked.
   [1, 3].forEach((n) => {
-    const slot = slots[n - 1];
+    const slot = slots[n - 1]!;
     const entry = now - (15 + rnd(90)) * 60_000;
     const plate = pick(PLATES);
     slot.status = "occupied";
@@ -215,7 +215,7 @@ export function tick(prev: SafeparkState): SafeparkState {
         ...alerts,
       ];
     } else if (free.length) {
-      const slot = pick(free);
+      const slot = pick(free)!;
       slot.status = "occupied";
       slot.vehicleNumber = plate;
       slot.entryTime = now;
@@ -236,7 +236,7 @@ export function tick(prev: SafeparkState): SafeparkState {
         },
         ...vehicles,
       ];
-      daily[daily.length - 1].entries += 1;
+      daily[daily.length - 1]!.entries += 1;
     }
   }
 
@@ -244,7 +244,7 @@ export function tick(prev: SafeparkState): SafeparkState {
   else if (roll < 0.5) {
     const inside = vehicles.filter((v) => v.status === "inside");
     if (inside.length) {
-      const v = pick(inside);
+      const v = pick(inside)!;
       v.status = "exited";
       v.exitTime = now;
       v.durationMs = now - v.entryTime;
@@ -256,7 +256,7 @@ export function tick(prev: SafeparkState): SafeparkState {
         slot.distanceCm = 110 + rnd(40);
       }
       sensors.gate = "open";
-      daily[daily.length - 1].exits += 1;
+      daily[daily.length - 1]!.exits += 1;
       alerts = alerts.map((a) =>
         a.type === "wrong_parking" && a.slot === v.slot ? { ...a, resolved: true } : a,
       );
