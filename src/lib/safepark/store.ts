@@ -25,64 +25,71 @@ function emit(next: SafeparkState) {
 
 /** Convert a Firebase snapshot object into our SafeparkState shape. */
 function fromFirebase(raw: Record<string, unknown>): SafeparkState {
-  const slotsRaw = (raw.parkingSlots ?? {}) as Record<string, Record<string, unknown>>;
+  type Node = Record<string, unknown>;
+  const node = (parent: Node | undefined, key: string): Node =>
+    ((parent?.[key] ?? {}) as Node);
+
+  const slotsRaw = node(raw, "parkingSlots");
   const slots = [1, 2, 3, 4, 5].map((n) => {
-    const s = slotsRaw[`slot${n}`] ?? {};
-    const isReserved = Boolean(s.isReserved ?? n === 5);
-    const occupied = Boolean(s.occupied);
+    const s = node(slotsRaw, `slot${n}`);
+    const isReserved = Boolean(s["isReserved"] ?? n === 5);
+    const occupied = Boolean(s["occupied"]);
     return {
       id: `slot${n}`,
       number: n,
       isReserved,
       status: occupied ? "occupied" : isReserved ? "reserved" : "available",
-      vehicleNumber: (s.vehicleNumber as string) || null,
-      entryTime: (s.entryTime as number) || null,
-      distanceCm: Number(s.distanceCm ?? 0),
-      sensor: (s.sensor as "ok" | "fault") ?? "ok",
+      vehicleNumber: (s["vehicleNumber"] as string) || null,
+      entryTime: (s["entryTime"] as number) || null,
+      distanceCm: Number(s["distanceCm"] ?? 0),
+      sensor: (s["sensor"] as "ok" | "fault") ?? "ok",
     } as SafeparkState["slots"][number];
   });
 
-  const toArray = <T,>(node: unknown): T[] =>
-    node ? (Object.entries(node as Record<string, T>).map(([id, v]) => ({ id, ...v })) as T[]) : [];
+  const toArray = <T,>(n: unknown): T[] =>
+    n ? (Object.entries(n as Record<string, T>).map(([id, v]) => ({ id, ...v })) as T[]) : [];
 
-  const vehicles = toArray<VehicleRecord>((raw.vehicles as Record<string, unknown>)?.vehicleRecords)
-    .sort((a, b) => b.entryTime - a.entryTime);
-  const alerts = toArray<AlertRecord>(raw.alerts).sort((a, b) => b.timestamp - a.timestamp);
+  const vehicles = toArray<VehicleRecord>(node(raw, "vehicles")["vehicleRecords"]).sort(
+    (a, b) => b.entryTime - a.entryTime,
+  );
+  const alerts = toArray<AlertRecord>(raw["alerts"]).sort((a, b) => b.timestamp - a.timestamp);
 
-  const sensors = (raw.sensors ?? {}) as Record<string, Record<string, unknown>>;
-  const mq2 = (sensors.mq2 ?? {}) as Record<string, unknown>;
-  const ir = (sensors.ir ?? {}) as Record<string, unknown>;
-  const device = ((raw.device as Record<string, unknown>)?.esp32 ?? {}) as Record<string, unknown>;
-  const lastSeen = Number(device.lastSeen ?? 0);
+  const sensors = node(raw, "sensors");
+  const mq2 = node(sensors, "mq2");
+  const ir = node(sensors, "ir");
+  const deviceRoot = node(raw, "device");
+  const device = node(deviceRoot, "esp32");
+  const lastSeen = Number(device["lastSeen"] ?? 0);
 
   return {
     slots,
     vehicles,
     alerts,
     sensors: {
-      mq2Ppm: Number(mq2.ppm ?? 0),
-      smokeAlert: Boolean(mq2.alert),
-      irEntry: Boolean(ir.triggered),
-      irStatus: (ir.status as "ok" | "fault") ?? "ok",
-      buzzer: Boolean((raw.device as Record<string, unknown>)?.buzzer),
-      gate: ((raw.device as Record<string, unknown>)?.gate as "open" | "closed") ?? "closed",
+      mq2Ppm: Number(mq2["ppm"] ?? 0),
+      smokeAlert: Boolean(mq2["alert"]),
+      irEntry: Boolean(ir["triggered"]),
+      irStatus: (ir["status"] as "ok" | "fault") ?? "ok",
+      buzzer: Boolean(deviceRoot["buzzer"]),
+      gate: (deviceRoot["gate"] as "open" | "closed") ?? "closed",
       ultrasonicOnline: slots.filter((s) => s.sensor === "ok").length,
     },
     device: {
       // ESP32 heartbeats every 10s -> treat >30s silence as offline.
-      online: Boolean(device.online) && Date.now() - lastSeen < 30_000,
+      online: Boolean(device["online"]) && Date.now() - lastSeen < 30_000,
       lastSeen,
-      wifiSsid: String(device.ssid ?? "-"),
-      wifiRssi: Number(device.rssi ?? 0),
-      firebaseConnected: Boolean(device.firebaseConnected ?? true),
-      firmware: String(device.firmware ?? "-"),
-      uptimeSec: Number(device.uptimeSec ?? 0),
+      wifiSsid: String(device["ssid"] ?? "-"),
+      wifiRssi: Number(device["rssi"] ?? 0),
+      firebaseConnected: Boolean(device["firebaseConnected"] ?? true),
+      firmware: String(device["firmware"] ?? "-"),
+      uptimeSec: Number(device["uptimeSec"] ?? 0),
     },
     daily: state.daily,
     source: "firebase",
     connected: true,
   };
 }
+
 
 async function startFirebase() {
   try {
